@@ -112,3 +112,16 @@ class CollapsibleAISidebar(QWidget):
 
     def is_expanded(self) -> bool:
         return self._expanded
+
+    def show_panel(self, panel: str) -> None:
+        mapping = {
+            "ai": (0, self.ai_btn),
+            "chat": (1, self.chat_btn),
+            "notes": (2, self.note_btn),
+        }
+        target = mapping.get(panel)
+        if not target:
+            return
+        index, button = target
+        button.setChecked(True)
+        self.stack.setCurrentIndex(index)

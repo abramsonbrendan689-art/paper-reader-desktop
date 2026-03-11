@@ -1,9 +1,7 @@
-from __future__ import annotations
-
-from pathlib import Path
+﻿from __future__ import annotations
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QCloseEvent, QGuiApplication, QResizeEvent
+from PySide6.QtGui import QCloseEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -117,7 +115,7 @@ class MainWindow(QMainWindow):
 
         title = QLabel("阅读笔记")
         title.setObjectName("SectionTitle")
-        subtitle = QLabel("记录当前页面理解、引文草稿和待办点。")
+        subtitle = QLabel("记录当前页面理解、引用草稿和待办事项。")
         subtitle.setObjectName("SectionSupporting")
 
         self.notes_list = QListWidget()
@@ -154,6 +152,7 @@ class MainWindow(QMainWindow):
         self.parallel_reader.current_page_changed.connect(self.on_page_changed)
         self.parallel_reader.scroll_ratio_changed.connect(self._on_scroll_ratio_changed)
         self.parallel_reader.selected_text_changed.connect(self._on_selected_text_changed)
+        self.parallel_reader.reader_action_requested.connect(self._handle_reader_action)
 
         self.ai_panel.action_requested.connect(self._handle_ai_action)
         self.ai_panel.save_note_requested.connect(self._save_ai_result_to_note)
@@ -374,6 +373,12 @@ class MainWindow(QMainWindow):
         worker.error.connect(lambda e: QMessageBox.critical(self, "翻译失败", e))
         worker.finished.connect(lambda: self._on_translate_worker_finished(worker))
         self._threads.append(worker)
+        for page_number in page_blocks_map:
+            self.parallel_reader.translated_reader.set_page_runtime_status(
+                page_number,
+                "translating",
+                "正在生成本页中文译文，请稍候……",
+            )
         self.status.showMessage(running_message)
         worker.start()
 
@@ -441,6 +446,31 @@ class MainWindow(QMainWindow):
         if not text:
             QMessageBox.information(self, "提示", "请先在译文段落或结构模式中选中文本")
             return
+        self._run_explain_for_text(text)
+
+    def send_selected_to_chat(self) -> None:
+        text = self.parallel_reader.get_selected_source_text()
+        if not text:
+            QMessageBox.information(self, "提示", "请先在译文段落或结构模式中选中文本")
+            return
+        self._queue_text_to_chat(text)
+
+    def _handle_reader_action(self, action: str, text: str) -> None:
+        text = (text or "").strip()
+        if not text:
+            return
+        if action == "explain":
+            self._run_explain_for_text(text)
+            return
+        if action == "chat":
+            self._queue_text_to_chat(text)
+            return
+        if action == "note":
+            self._queue_text_to_note(text)
+
+    def _run_explain_for_text(self, text: str) -> None:
+        if not self._ensure_ai_available():
+            return
         self._run_ai_worker(
             mode="explain",
             payload={"text": text, "question": "请解释该段落，并说明它在全文中的作用。"},
@@ -448,16 +478,29 @@ class MainWindow(QMainWindow):
             status_message="正在解释选中文本...",
         )
 
-    def send_selected_to_chat(self) -> None:
-        text = self.parallel_reader.get_selected_source_text()
-        if not text:
-            QMessageBox.information(self, "提示", "请先在译文段落或结构模式中选中文本")
-            return
+    def _queue_text_to_chat(self, text: str) -> None:
         if not self.ai_sidebar.is_expanded():
             self._toggle_ai_sidebar()
+        self.ai_sidebar.show_panel("chat")
         self.chat_panel.set_input_text(text)
         self.status.showMessage("已将选中文本填入聊天输入框")
         Snackbar.show_message(self, "已发送到聊天输入框")
+
+    def _queue_text_to_note(self, text: str) -> None:
+        if not self.ai_sidebar.is_expanded():
+            self._toggle_ai_sidebar()
+        self.ai_sidebar.show_panel("notes")
+        note_template = f"摘录：\n{text}\n\n笔记：\n"
+        if not self.note_edit.toPlainText().strip():
+            self.note_edit.setPlainText(note_template)
+        else:
+            self.note_edit.appendPlainText("\n" + note_template)
+        self.note_edit.setFocus()
+        cursor = self.note_edit.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.note_edit.setTextCursor(cursor)
+        self.status.showMessage("已将选中文本加入笔记草稿")
+        Snackbar.show_message(self, "已加入笔记草稿")
 
     def _handle_ai_action(self, action: str) -> None:
         if not self.current_paper:
@@ -687,7 +730,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "设置已保存",
-            "设置已保存。\nDeepSeek 配置已写入项目根目录 .env，应用配置已写入数据库。",
+            "设置已写入数据库。\n注意：DeepSeek 配置已写入项目根目录 .env。",
         )
 
     def _cleanup_thread(self, thread) -> None:

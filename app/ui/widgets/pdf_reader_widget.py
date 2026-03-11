@@ -35,6 +35,7 @@ class PDFReaderWidget(QWidget):
     visible_pages_changed = Signal(list)
     scroll_ratio_changed = Signal(float)
     page_count_changed = Signal(int)
+    page_anchor_changed = Signal(int, float)
 
     def __init__(self, pdf_service: PDFService, parent=None, show_toolbar: bool = True):
         super().__init__(parent)
@@ -387,6 +388,12 @@ class PDFReaderWidget(QWidget):
             self.page_spin.setValue(self.current_page + 1)
             self.page_spin.blockSignals(False)
             self.current_page_changed.emit(self.current_page)
+
+        state = self._page_states[best_page]
+        image_top = state.card.y() + state.image_label.y()
+        image_height = max(1, state.image_label.height())
+        anchor_ratio = max(0.0, min(1.0, (center_y - image_top) / image_height))
+        self.page_anchor_changed.emit(best_page, anchor_ratio)
 
         self.visible_pages_changed.emit(self.get_visible_page_numbers())
 

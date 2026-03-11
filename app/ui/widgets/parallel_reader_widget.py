@@ -17,6 +17,7 @@ class ParallelReaderWidget(QWidget):
     visible_pages_changed = Signal(list)
     scroll_ratio_changed = Signal(float)
     selected_text_changed = Signal(str)
+    reader_action_requested = Signal(str, str)
 
     MODE_PARALLEL = "parallel"
     MODE_SOURCE = "source_only"
@@ -104,10 +105,12 @@ class ParallelReaderWidget(QWidget):
     def _bind_events(self) -> None:
         self.source_reader.current_page_changed.connect(self._on_source_page_changed)
         self.source_reader.visible_pages_changed.connect(self.visible_pages_changed.emit)
-        self.source_reader.scroll_ratio_changed.connect(self._on_source_scroll_ratio_changed)
+        self.source_reader.scroll_ratio_changed.connect(self.scroll_ratio_changed.emit)
+        self.source_reader.page_anchor_changed.connect(self._on_source_page_anchor_changed)
 
         self.translated_reader.current_page_changed.connect(self._on_translated_page_changed)
         self.translated_reader.selected_text_changed.connect(self._on_selected_text_changed)
+        self.translated_reader.action_requested.connect(self.reader_action_requested.emit)
         self.structure_panel.selected_text_changed.connect(self._on_selected_text_changed)
 
     def load_pdf(self, pdf_path: str, initial_page: int = 0, initial_scroll_ratio: float = 0.0) -> None:
@@ -214,11 +217,10 @@ class ParallelReaderWidget(QWidget):
             self.source_reader.jump_to_page(page_number)
         _ = page_number
 
-    def _on_source_scroll_ratio_changed(self, ratio: float) -> None:
-        if self.sync_enabled and self.current_mode != self.MODE_SOURCE:
-            self.translated_reader.set_scroll_ratio(ratio)
-        self.scroll_ratio_changed.emit(ratio)
-
     def _on_selected_text_changed(self, text: str) -> None:
         self._selected_text = text or ""
         self.selected_text_changed.emit(self._selected_text)
+
+    def _on_source_page_anchor_changed(self, page_number: int, ratio: float) -> None:
+        if self.sync_enabled and self.current_mode != self.MODE_SOURCE:
+            self.translated_reader.jump_to_anchor(page_number, ratio)

@@ -19,10 +19,21 @@ class TranslationLayoutService:
     ) -> TranslationPageView:
         result_map = {item.block_index: item for item in (results or [])}
         views: list[TranslationBlockView] = []
+        total_blocks = 0
+        translated_blocks = 0
+        failed_blocks = 0
 
         for block in blocks:
             result = result_map.get(block.block_index)
-            translated_text = result.translated_text if result else "（未翻译）"
+            translated_text = result.translated_text if result else ""
+
+            if block.block_type not in {"header", "footer"} and block.text.strip():
+                total_blocks += 1
+                if translated_text.strip():
+                    if translated_text.startswith("翻译失败"):
+                        failed_blocks += 1
+                    else:
+                        translated_blocks += 1
 
             views.append(
                 TranslationBlockView(
@@ -40,11 +51,23 @@ class TranslationLayoutService:
                 )
             )
 
+        status, status_text = self._build_status(
+            total_blocks=total_blocks,
+            translated_blocks=translated_blocks,
+            failed_blocks=failed_blocks,
+            has_results=results is not None,
+        )
+
         return TranslationPageView(
             page_number=page_number,
             blocks=views,
             heading=f"译文第 {page_number + 1} 页",
             meta=f"共 {len(views)} 个文本块",
+            status=status,
+            status_text=status_text,
+            translated_blocks=translated_blocks,
+            total_blocks=total_blocks,
+            failed_blocks=failed_blocks,
         )
 
     @staticmethod
@@ -61,3 +84,22 @@ class TranslationLayoutService:
         if block_type in {"header", "footer"}:
             return "页眉页脚"
         return "正文"
+
+    @staticmethod
+    def _build_status(
+        total_blocks: int,
+        translated_blocks: int,
+        failed_blocks: int,
+        has_results: bool,
+    ) -> tuple[str, str]:
+        if total_blocks <= 0:
+            return "empty", "当前页未识别到可阅读文本块。"
+        if not has_results:
+            return "untranslated", f"当前页尚未翻译，可点击顶部按钮开始翻译。共 {total_blocks} 个块。"
+        if translated_blocks == 0 and failed_blocks > 0:
+            return "failed", f"当前页翻译失败，共 {failed_blocks} 个块失败。"
+        if translated_blocks <= 0:
+            return "untranslated", f"当前页尚未生成译文，共 {total_blocks} 个块。"
+        if translated_blocks < total_blocks:
+            return "partial", f"当前页已完成 {translated_blocks}/{total_blocks} 个块。"
+        return "done", f"当前页译文已完成，共 {translated_blocks} 个块。"

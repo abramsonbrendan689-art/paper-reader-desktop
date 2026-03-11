@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QContextMenuEvent, QGuiApplication
-from PySide6.QtWidgets import QFrame, QLabel, QMenu, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QLabel, QMenu, QVBoxLayout, QWidget
 
 from app.models.translation_page import TranslationBlockView, TranslationPageView
 from app.ui.theme import apply_elevation
@@ -13,6 +13,7 @@ from app.ui.theme import apply_elevation
 
 class _ParagraphLabel(QLabel):
     paragraph_clicked = Signal(str)
+    action_requested = Signal(str, str)
 
     def __init__(self, source_text: str, translated_text: str, role: str, parent=None):
         super().__init__(parent)
@@ -42,22 +43,36 @@ class _ParagraphLabel(QLabel):
         menu = QMenu(self)
         copy_translated = QAction("复制译文", self)
         copy_source = QAction("复制原文", self)
+        explain_action = QAction("解释这段", self)
+        chat_action = QAction("发送到聊天", self)
+        note_action = QAction("加入笔记", self)
         copy_translated.triggered.connect(
             lambda: QGuiApplication.clipboard().setText(self.translated_text)
         )
         copy_source.triggered.connect(lambda: QGuiApplication.clipboard().setText(self.source_text))
+        explain_action.triggered.connect(lambda: self.action_requested.emit("explain", self.source_text))
+        chat_action.triggered.connect(lambda: self.action_requested.emit("chat", self.source_text))
+        note_action.triggered.connect(lambda: self.action_requested.emit("note", self.source_text))
         menu.addAction(copy_translated)
         menu.addAction(copy_source)
+        menu.addSeparator()
+        menu.addAction(explain_action)
+        menu.addAction(chat_action)
+        menu.addAction(note_action)
         menu.exec(event.globalPos())
 
 
 class TranslatedPageWidget(QFrame):
     source_selected = Signal(str)
+    action_requested = Signal(str, str)
 
     def __init__(self, page: TranslationPageView, parent=None):
         super().__init__(parent)
         self.page = page
         self._paragraph_widgets: dict[int, QLabel] = {}
+        self._status_banner: QFrame | None = None
+        self._status_title: QLabel | None = None
+        self._status_body: QLabel | None = None
         self.setObjectName("translatedPageContainer")
         apply_elevation(self, "card")
         self._build_ui()
@@ -78,6 +93,22 @@ class TranslatedPageWidget(QFrame):
         meta = QLabel(f"译文第 {self.page.page_number + 1} 页")
         meta.setObjectName("translatedPageMeta")
         surface_layout.addWidget(meta)
+
+        self._status_banner = QFrame()
+        self._status_banner.setObjectName("translatedStatusBanner")
+        self._status_banner.setProperty("status", self.page.status)
+        status_layout = QVBoxLayout(self._status_banner)
+        status_layout.setContentsMargins(14, 12, 14, 12)
+        status_layout.setSpacing(4)
+        self._status_title = QLabel()
+        self._status_title.setObjectName("translatedStatusTitle")
+        self._status_body = QLabel()
+        self._status_body.setObjectName("translatedStatusBody")
+        self._status_body.setWordWrap(True)
+        status_layout.addWidget(self._status_title)
+        status_layout.addWidget(self._status_body)
+        surface_layout.addWidget(self._status_banner)
+        self._apply_page_status()
 
         title_text = self._pick_title()
         if title_text:
@@ -128,6 +159,7 @@ class TranslatedPageWidget(QFrame):
         ref = _ParagraphLabel(block.source_text, block.translated_text, "meta")
         ref.hide()
         ref.paragraph_clicked.connect(self.source_selected.emit)
+        ref.action_requested.connect(self.action_requested.emit)
         return ref
 
     def _pick_title(self) -> str:
@@ -240,6 +272,7 @@ class TranslatedPageWidget(QFrame):
                 role=role,
             )
             para.paragraph_clicked.connect(self.source_selected.emit)
+            para.action_requested.connect(self.action_requested.emit)
             container.addWidget(para)
             self._paragraph_widgets[block.block_index] = para
 
@@ -262,6 +295,7 @@ class TranslatedPageWidget(QFrame):
                 role="body",
             )
             para.paragraph_clicked.connect(self.source_selected.emit)
+            para.action_requested.connect(self.action_requested.emit)
             layout.addWidget(para)
             self._paragraph_widgets[block.block_index] = para
 
@@ -273,3 +307,79 @@ class TranslatedPageWidget(QFrame):
                 paragraph.source_text = source_text
             else:
                 paragraph.setText(html.escape(translated_text))
+
+    def set_page_status(
+        self,
+        status: str,
+        status_text: str,
+        translated_blocks: int | None = None,
+        total_blocks: int | None = None,
+        failed_blocks: int | None = None,
+    ) -> None:
+        self.page.status = status
+        self.page.status_text = status_text
+        if translated_blocks is not None:
+            self.page.translated_blocks = translated_blocks
+        if total_blocks is not None:
+            self.page.total_blocks = total_blocks
+        if failed_blocks is not None:
+            self.page.failed_blocks = failed_blocks
+        self._apply_page_status()
+
+    def get_anchor_widget_for_ratio(self, ratio: float):
+        ratio = max(0.0, min(1.0, ratio))
+        candidates: list[tuple[float, QWidget]] = []
+        bbox_fallback: list[QWidget] = []
+
+        page_height = 0.0
+        for block in self.page.blocks:
+            bbox = block.extra.get("bbox") or ()
+            if len(bbox) >= 4:
+                try:
+                    page_height = max(page_height, float(bbox[3]))
+                except Exception:  # noqa: BLE001
+                    pass
+
+        for block in self.page.blocks:
+            widget = self._paragraph_widgets.get(block.block_index)
+            if widget is None or widget.isHidden():
+                continue
+            bbox = block.extra.get("bbox") or ()
+            if len(bbox) >= 4 and page_height > 0:
+                try:
+                    center = (float(bbox[1]) + float(bbox[3])) / 2
+                    candidates.append((center / page_height, widget))
+                    continue
+                except Exception:  # noqa: BLE001
+                    pass
+            bbox_fallback.append(widget)
+
+        if candidates:
+            best_ratio, best_widget = min(candidates, key=lambda item: abs(item[0] - ratio))
+            _ = best_ratio
+            return best_widget
+
+        if bbox_fallback:
+            index = min(len(bbox_fallback) - 1, int(round(ratio * max(0, len(bbox_fallback) - 1))))
+            return bbox_fallback[index]
+        return None
+
+    def _apply_page_status(self) -> None:
+        if not self._status_banner or not self._status_title or not self._status_body:
+            return
+
+        self._status_banner.setProperty("status", self.page.status)
+        self._status_banner.style().unpolish(self._status_banner)
+        self._status_banner.style().polish(self._status_banner)
+
+        title_map = {
+            "untranslated": "尚未翻译",
+            "translating": "正在翻译",
+            "partial": "部分完成",
+            "done": "译文已就绪",
+            "failed": "翻译失败",
+            "empty": "无可读内容",
+        }
+        self._status_title.setText(title_map.get(self.page.status, "当前状态"))
+        self._status_body.setText(self.page.status_text or "")
+        self._status_banner.setVisible(self.page.status != "done")

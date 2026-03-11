@@ -20,4 +20,8 @@ class TranslationPageView:
     blocks: list[TranslationBlockView]
     heading: str = ""
     meta: str = ""
-
+    status: str = "untranslated"
+    status_text: str = ""
+    translated_blocks: int = 0
+    total_blocks: int = 0
+    failed_blocks: int = 0

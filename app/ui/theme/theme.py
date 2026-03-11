@@ -328,6 +328,32 @@ def build_stylesheet(tokens: DesignTokens) -> str:
         border-radius: {s.md}px;
     }}
 
+    QFrame#translatedStatusBanner {{
+        background: {c.surface_variant};
+        border: 1px solid {c.outline_variant};
+        border-radius: {s.md}px;
+    }}
+
+    QFrame#translatedStatusBanner[status="translating"] {{
+        background: {c.primary_container};
+        border-color: {c.primary};
+    }}
+
+    QFrame#translatedStatusBanner[status="partial"] {{
+        background: {c.surface_variant};
+        border-color: {c.primary};
+    }}
+
+    QFrame#translatedStatusBanner[status="failed"] {{
+        background: #FDECEC;
+        border-color: {c.error};
+    }}
+
+    QFrame#translatedStatusBanner[status="empty"] {{
+        background: {c.surface_variant};
+        border-style: dashed;
+    }}
+
     QFrame#translatedSectionCard {{
         background: {c.surface_variant};
         border: 1px solid {c.outline_variant};
@@ -354,6 +380,17 @@ def build_stylesheet(tokens: DesignTokens) -> str:
     QLabel#translatedMetaLine {{
         color: {c.text_secondary};
         font-size: {t.doc_small}px;
+    }}
+
+    QLabel#translatedStatusTitle {{
+        color: {c.text_primary};
+        font-size: {t.body}px;
+        font-weight: 700;
+    }}
+
+    QLabel#translatedStatusBody {{
+        color: {c.text_secondary};
+        font-size: {t.supporting}px;
     }}
 
     QLabel#translatedSectionTitle {{
