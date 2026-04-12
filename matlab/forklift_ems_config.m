@@ -32,7 +32,7 @@ EMSConfig.lift_vel_lifting_min  = 0.05;   % 上升 → 举升工况
 EMSConfig.lift_vel_desc_max     = -0.05;  % 下降 → 下降工况
 
 % FSM防抖最小停留时间 (s)
-EMSConfig.min_dwell_time_s      = 0.5;
+EMSConfig.min_dwell_s               = 0.5;
 
 %% ======================================================================
 %% 2. 叉车工况功率特性表 / Condition Power Profile Table
