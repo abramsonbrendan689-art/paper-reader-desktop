@@ -404,7 +404,7 @@ class HybridLSTMMPCEMS:
 
             # 展开预测域（仅优化第一步，但成本考虑 N 步）
             for k in range(N_mpc):
-                scale_k = self.cfg.gamma if hasattr(self.cfg, "gamma") else 0.95 ** k
+                scale_k = 0.95 ** k   # 折扣因子，越远预测权重越小
                 pk      = p_pred[k]
 
                 # 假设后续步按比例维持当前动作（简化）
@@ -532,11 +532,8 @@ class HybridLSTMMPCEMS:
                     Y_list.append(buf_arr[seq_len:, 5])  # 功率列
 
         if not X_list:
-            return np.zeros((1, seq_len, self.INPUT_DIM)), np.zeros((1, N_pred))
+            return np.zeros((1, seq_len, LSTMPowerPredictor.INPUT_DIM)), np.zeros((1, N_pred))
 
         X = np.array(X_list, dtype=np.float32)
         Y = np.array(Y_list, dtype=np.float32)
         return X, Y
-
-    # 暴露 INPUT_DIM 给外部引用
-    INPUT_DIM = LSTMPowerPredictor.INPUT_DIM

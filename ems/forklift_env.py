@@ -176,7 +176,7 @@ class ForkLiftEnv:
     """
     叉车混合储能EMS仿真环境。
 
-    状态空间（dim=11）
+    状态空间（dim=10）
     ------------------
     [SOC_li, SOC_na, P_demand_norm, wc_0..4, load_ratio, dP_dt_norm]
 
@@ -400,7 +400,7 @@ class ForkLiftEnv:
         return float(reward * w.reward_scale)
 
     def _build_state(self) -> np.ndarray:
-        """构建状态向量（dim=11）"""
+        """构建状态向量（dim=10）"""
         soc_li = self.battery_li.soc
         soc_na = self.battery_na.soc
         p_norm = self._demand_power / self._p_norm
